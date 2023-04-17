@@ -3,6 +3,9 @@ local Test = {}
 
 
 function Test:new( name, env, action )
+    if type(action)~="function" then
+        error("arg 3 must be function",2)
+    end
     local obj = {}
     setmetatable(obj,{__index=self})
 
@@ -19,25 +22,26 @@ function Test:new( name, env, action )
 end
 
 function Test:run()
+    self.env:apply( self.action )
     local results = {pcall(self.action)}
     local ok = results[1]
     self.actionResults = {table.unpack(results,2)}
     if ok and self.expects.error then
         self.passed = false
         self.reason = "Expected error, but none thrown"
-        return
+        return self.passed, self.reason
     end
     if not ok and not self.expects.error then
         self.passed = false
         self.reason = "No errro was expected, but one was thrown. Error: "..tostring(results[2])
-        return
+        return self.passed, self.reason
     end
     if not ok and self.expects.error then
         if self.expects.errorMessage == nil or
            self.expects.errorMessage == results[2] then
             self.passed = true
             self.reason = false
-            return
+            return self.passed, self.reason
         end
         self.passed = false
         self.reason = 'Expected error with message "'..tostring(self.expects.errorMessage)..'", got a different error: '..tostring(results[2])
@@ -48,9 +52,26 @@ function Test:run()
         if not passed then
             self.passed = false
             self.reason = reason
-            return
+            return self.passed, self.reason
         end
     end
+
+    for i, proxy in ipairs(self.env:getProxies()) do
+        local allHit, usage = proxy:allHit()
+        if not allHit then
+            self.passed = false
+            self.reason = ("All expectations met, but you have unused stubbing on your %d%s proxy. Here are the stubs and usage:\n%s")
+                :format(
+                    i,
+                    ({"st","nd","rd"})[i%10] or "th",
+                    usage
+                )
+            return self.passed, self.reason --failed
+        end
+    end
+
+    self.passed = true
+    self.reason = false
     return self.passed, self.reason
 end
 
@@ -76,9 +97,7 @@ function Test:_eval (var, errorMsg)
     return var(), errorMsg:gsub("$1", fVar(var()))
 end
 function Test:expect( expression )
-    table.insert( self.expects, {
-        expression = expression
-    } )
+    table.insert( self.expects, expression)
     return self
 end
 function Test:eq( var, expected )
@@ -148,4 +167,17 @@ function Test:isNil( var )
         return v == nil, msg
     end)
 end
+function Test:hasEntry( var, key, expected )
+    self:expect(function()
+        local v, msg = self:_eval(var, "$1 is not a table with entry ["..fVar(key).."] and expected value "..fVar(expected))
+        return type(v)=="table" and v[key] == expected, msg
+    end)
+end
+function Test:hasKey( var, key )
+    self:expect(function()
+        local v, msg = self:_eval(var, "$1 > is not a table with entry ["..fVar(key).."]")
+        return type(v)=="table" and v[key] == expected, msg
+    end)
+end
 
+return Test

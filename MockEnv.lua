@@ -3,21 +3,22 @@ local MockEnv = {}
 
 if not setfenv then
     function setfenv(fn, env)
-    local i = 1
-    while true do
-      local name = debug.getupvalue(fn, i)
-      if name == "_ENV" then
-        debug.upvaluejoin(fn, i, (function()
-          return env
-        end), 1)
-        break
-      elseif not name then
-        break
-      end
-      i = i + 1
+        local i = 1
+        while true do
+          local name, value = debug.getupvalue(fn, i)
+          if not name then
+            break
+          elseif name == "_ENV" then
+            debug.upvaluejoin(fn, i, (function()
+              return env
+            end), 1)
+            break
+          end
+          i = i + 1
+        end
+        return fn
     end
-    return fn
-  end
+    
 end
 
 function MockEnv:new()
@@ -26,9 +27,17 @@ function MockEnv:new()
         proxyList = {}, --to build
         envValues = {}, --holds proxies and values
         globals = _G,
+        unbuild = {}
     }
     setmetatable(obj, {__index=self})
     obj:reset()
+    
+    obj.envValues["type"] = function(x)
+        if type(x)=="table" and getmetatable(x) and getmetatable(x).__type then
+            return getmetatable(x).__type
+        end
+        return type(x)
+    end
 
     return obj
 end
@@ -38,14 +47,16 @@ function MockEnv:disableGlobals()
 end
 
 function MockEnv:proxy( name, object )
-    self.envValues[name] = Proxy:new( object )
-    table.insert(self.proxyList, self.env[name])
-    return self
+    if not name then error("name expected",2) end
+    if not object then error("object expected",2) end
+    local proxy = Proxy:new( object )
+    self.envValues[name] = proxy.proxy
+    table.insert(self.proxyList, proxy)
+    return proxy
 end
 
 function MockEnv:put( name, object )
     self.envValues[name] = object
-    return self
 end
 
 function MockEnv:reset()
@@ -59,10 +70,11 @@ function MockEnv:reset()
 end
 
 function MockEnv:apply( func )
-    for i,p in ipairs(self.proxyList) do
-        p:build()
-    end
     setfenv( func, self.sandbox )
+end
+
+function MockEnv:getProxies()
+    return self.proxyList
 end
 
 return MockEnv

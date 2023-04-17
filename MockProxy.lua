@@ -2,6 +2,14 @@ local Proxy = {
     static = {}
 }
 
+local function fVar( v )
+    if type(v)=="string" then
+        return '"'..v..'"'
+    end
+    return tostring(v)
+end
+
+
 function Proxy.static.inRange(low, high)
     return function(x)
         return type(x)=="number" and low <= x and x <= high
@@ -54,6 +62,7 @@ function Proxy.static.varargs()
 end
 
 function Proxy:new( target )
+    if not target then error("target expected",2) end
     local obj = {
         target = target,
         records = {
@@ -61,36 +70,41 @@ function Proxy:new( target )
             index = {},
             assign = {}
         },
+        realDefault = false, --if false, calling throws an error about missing stubbing, only used on calls
         mockCall = {},
         mockIndex = {},
-        built = false
+        _nextMockID = 1
     }
+
+    obj.proxy = {}
+
     setmetatable(obj, {
         __index=function(t, k)
-            if obj.built then
-                obj.records.index[k] = (obj.records.index[k] or 0) + 1
-                return target[k]
-            end
-            return obj[k]
+            return rawget(obj,k) or Proxy[k]
         end,
         __newindex=function(t,k,v)
-            if obj.built then
-                obj.target[k] = obj.target[v]
-                obj.records.assign[k] = obj.records.assign[k] or {}
-                table.insert(obj.records.assign[k], v)
-                return
-            end
             if obj.mockIndex[k] then error("overwrite of mocked index value", 2) end
             obj.mockIndex[k] = v
         end,
         __call=function(t,f,...)
-            if obj.built then 
-                obj.records.call[f] = obj.records.call[f] or {}
-                table.insert(obj.records.call[f], {...})
-                --TODO get mock return
-                return
-            end
             return obj:_createMockCall(f)
+        end
+    })
+    setmetatable(obj.proxy, {
+        __index=function(t, k)
+            obj.records.index[k] = (obj.records.index[k] or 0) + 1
+            return obj.target[k] or obj.mockIndex[k]
+        end,
+        __newindex=function(t,k,v)
+            obj.target[k] = obj.target[v]
+            obj.records.assign[k] = obj.records.assign[k] or {}
+            table.insert(obj.records.assign[k], v)
+            return            
+        end,
+        __call=function(t,...)
+            obj.records.call[f] = obj.records.call[f] or {}
+            table.insert(obj.records.call[f], {...})
+            return self:_match( f, {...})
         end,
         __type=type(target)
     })
@@ -103,50 +117,80 @@ end
 --myProxy{n=2, "foo", nil}                      .exact("bar")
 --myProxy{n=2, varargs=true eq("foo"), NIL()}   .matched("bar")
 --myProxy{n=2, varargs=matcher eq("foo"), NIL}  .matched("bar")
-function Proxy:_createMockCall(name,pattern)
+function Proxy:_createMockCall(pattern)
+    local id = self._nextMockID
+    self._nextMockID = self._nextMockID + 1
     local r = {
         exact = function(...)
             local returns = {...}
-            table.insert(self.mockCall[name], {
+            self.mockCall = self.mockCall or {}
+            local mock = {
+                type = "exact",
                 exact = pattern,
                 returns = returns,
-                hits = 0
-            })
+                hits = 0,
+                id = id
+            }
+            table.insert(self.mockCall, mock)
+            return mock
         end,
         matched = function(...)
             local returns = {...}
-            table.insert(self.mockCall[name], {
+            self.mockCall = self.mockCall or {}
+            local mock = {
+                type = "matched",
                 pattern = pattern,
                 returns = returns,
-                hits = 0
-            })
+                hits = 0,
+                id = id
+            }
+            table.insert(self.mockCall, mock)
+            return mock
         end,
         always = function(...)
             local returns = {...}
-            self.mockCall[name].always = {
+            self.mockCall = self.mockCall or {}
+            self.mockCall.always = {
+                type = "always",
                 returns = returns,
-                hits = 0
+                hits = 0,
+                id = id
             }
+            return self.mockCall.always
         end,
         exactCompute = function(computeFunc)
-            table.insert(self.mockCall[name], {
+            self.mockCall = self.mockCall or {}
+            local mock = {
+                type = "exactCompute",
                 exact = pattern,
                 compute = computeFunc,
-                hits = 0
-            })
+                hits = 0,
+                id = id
+            }
+            table.insert(self.mockCall, mock)
+            return mock
         end,
         matchedCompute = function(computeFunc)
-            table.insert(self.mockCall[name], {
+            self.mockCall = self.mockCall or {}
+            local mock = {
+                type = "matchedCompute",
                 pattern = pattern,
                 compute = computeFunc,
-                hits = 0
-            })
+                hits = 0,
+                id = id
+            }
+            table.insert(self.mockCall, mock)
+            return mock
         end,
         alwaysCompute = function(computeFunc)
-            self.mockCall[name].always = {
+            self.mockCall = self.mockCall or {}
+            self.mockCall.always = {
+                type = "alwaysCompute",
                 compute = computeFunc,
-                hits = 0
+                hits = 0,
+                id = id
             }
+            return self.mockCall.always
         end
     }
     r.default = r.always
@@ -195,10 +239,25 @@ function Proxy:_match(name, args)
         end
     end
 
+    if not f then --default/always backup
+        if self.mockCall[name].always then
+            f = self.mockCall[name]
+        end
+    end
+
     f.hits = f.hits + 1
     
     if not f then
-        return self.target(table.unpack(args)) --real function
+        if self.realDefault then
+            return self.target(table.unpack(args)) --real function
+        else
+            local argsStr = {}
+            for _,arg in ipairs(args) do
+                table.insert(argsStr, fVar(arg))
+            end
+            argsStr = table.concat(argsStr)
+            error("Missing stubbing for call to `"..name.."` with args ["..argsStr.."]. Add stubbing or use `realDefault=true`", 3)
+        end
     end
     if f.returns then
         return table.unpack(f.returns)
@@ -209,8 +268,28 @@ function Proxy:_match(name, args)
     error("missing case")
 end
 
-function Proxy:build()
-    self.built = true
+--return true if all mock call results have atleast 1 hit
+function Proxy:allHit()
+    local usageReport = {"Proxy<",tostring(self.target),">:\n"}
+    local all = true
+    for i, mock in ipairs(self.mockCall) do
+        if mock.hits == 0 then
+            all = false
+        end
+        table.insert(usageReport, ("\tid: %2d | hits: %5d | type: %s"):format(
+            mock.id, mock.hits, mock.type
+        ))
+    end
+    if self.mockCall.always then
+        local mock = self.mockCall.always
+        if mock.hits == 0 then
+            all = false
+        end
+        table.insert(usageReport, ("\tid: %2d | hits: %5d | type: %s"):format(
+            mock.id, mock.hits, mock.type
+        ))
+    end
+    return all, table.concat(usageReport)
 end
 
 return Proxy
