@@ -7,17 +7,20 @@ local TestRunner = {
 function TestRunner.static.generateReport(...)
     local tests = {...}
     local results = {
-        nPassed = 0,
-        nFailed = 0
+        passed = 0,
+        failed = 0,
+        tests = {}
     }
     for i, test in ipairs(tests) do
         local passed, reason = test:run()
-        results.nPassed = results.nPassed + (passed and 1 or 0)
-        results.nFailed = results.nFailed + ((not passed) and 1 or 0)
-        if not passed then
-            results[test] = reason
-        end
+        results.passed = results.passed + (passed and 1 or 0)
+        results.failed = results.failed + ((not passed) and 1 or 0)
+        results.tests[test] = {
+            passed = passed, 
+            reason = reason
+        }
     end
+    results.total = results.passed + results.failed
     return results
 end
 

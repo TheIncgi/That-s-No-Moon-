@@ -22,8 +22,9 @@ function Test:new( name, env, action )
 end
 
 function Test:run()
-    self.env:apply( self.action )
+    self.env:apply()
     local results = {pcall(self.action)}
+    self.env:unapply()
     local ok = results[1]
     self.actionResults = {table.unpack(results,2)}
     if ok and self.expects.error then
@@ -60,7 +61,7 @@ function Test:run()
         local allHit, usage = proxy:allHit()
         if not allHit then
             self.passed = false
-            self.reason = ("All expectations met, but you have unused stubbing on your %d%s proxy. Here are the stubs and usage:\n%s")
+            self.reason = ("All expectations met, but you have unused stubbing on your %d%s proxy. Here are the stubs and usage:\n\t%s")
                 :format(
                     i,
                     ({"st","nd","rd"})[i%10] or "th",
@@ -100,83 +101,163 @@ function Test:expect( expression )
     table.insert( self.expects, expression)
     return self
 end
-function Test:eq( var, expected )
+
+function Test:var_eq( var, expected )
     return self:expect(function()
         local v, msg = self:_eval(var, "expected "..fVar(expected)..", got $1")
         return v == expected, msg
     end)
 end
-
-function Test:neq( var, expected )
+function Test:var_neq( var, expected )
     return self:expect(function()
         local v, msg = self:_eval(var, "unexpected "..fVar(expected)..", got $1")
         return v ~= expected, msg
     end)
 end
-function Test:gt( var, expected )
+function Test:var_gt( var, expected )
     return self:expect(function()
         local v, msg = self:_eval(var, "$1 > "..fVar(expected).." is not true")
         return v > expected, msg
     end)
 end
-function Test:lt( var, expected )
+function Test:var_lt( var, expected )
     return self:expect(function()
         local v, msg = self:_eval(var, "$1 < "..fVar(expected).." is not true")
         return v < expected, msg
     end)
 end
-function Test:gte( var, expected )
+function Test:var_gte( var, expected )
     return self:expect(function()
         local v, msg = self:_eval(var, "$1 >= "..fVar(expected).." is not true")
         return v >= expected, msg
     end)
 end
-function Test:lte( var, expected )
+function Test:var_lte( var, expected )
     return self:expect(function()
         local v, msg = self:_eval(var, "$1 <= "..fVar(expected).." is not true")
         return v <= expected, msg
     end)
 end
-function Test:isTrue( var )
+function Test:var_isTrue( var )
     return self:expect(function()
         local v, msg = self:_eval(var, "$1 is not true")
         return v == true, msg
     end)
 end
-function Test:isFalse( var )
+function Test:var_isFalse( var )
     return self:expect(function()
         local v, msg = self:_eval(var, "$1 is not false")
         return v == false, msg
     end)
 end
-function Test:isTruthy( var )
+function Test:var_isTruthy( var )
     return self:expect(function()
         local v, msg = self:_eval(var, "$1 is not truthy")
         return not not v, msg
     end)
 end
-function Test:isFalsy( var )
+function Test:var_isFalsy( var )
     return self:expect(function()
         local v, msg = self:_eval(var, "$1 is not falsy")
         return not v, msg
     end)
 end
-function Test:isNil( var )
+function Test:var_isNil( var )
     return self:expect(function()
-        local v, msg = self:_eval(var, "$1 > is not nil")
+        local v, msg = self:_eval(var, "$1 is not nil")
         return v == nil, msg
     end)
 end
-function Test:hasEntry( var, key, expected )
+function Test:var_hasEntry( var, key, expected )
     self:expect(function()
         local v, msg = self:_eval(var, "$1 is not a table with entry ["..fVar(key).."] and expected value "..fVar(expected))
         return type(v)=="table" and v[key] == expected, msg
     end)
 end
-function Test:hasKey( var, key )
+function Test:var_hasKey( var, key )
     self:expect(function()
         local v, msg = self:_eval(var, "$1 > is not a table with entry ["..fVar(key).."]")
         return type(v)=="table" and v[key] == expected, msg
+    end)
+end
+
+
+function Test:eq( actual, expected )
+    return self:expect(function()
+        local msg = "expected "..fVar(expected)..", got "..fVar(actual)
+        return actual == expected, msg
+    end)
+end
+function Test:neq( actual, expected )
+    return self:expect(function()
+        local msg = "unexpected "..fVar(expected)..", got "..fVar(actual)
+        return actual ~= expected, msg
+    end)
+end
+function Test:gt( actual, expected )
+    return self:expect(function()
+        local msg = actual, fVar(actual).." > "..fVar(expected).." is not true"
+        return actual > expected, msg
+    end)
+end
+function Test:lt( actual, expected )
+    return self:expect(function()
+        local msg = fVar(actual).." < "..fVar(expected).." is not true"
+        return actual < expected, msg
+    end)
+end
+function Test:gte( actual, expected )
+    return self:expect(function()
+        local msg = fVar(actual).." >= "..fVar(expected).." is not true"
+        return actual >= expected, msg
+    end)
+end
+function Test:lte( actual, expected )
+    return self:expect(function()
+        local msg = fVar(actual).." <= "..fVar(expected).." is not true"
+        return actual <= expected, msg
+    end)
+end
+function Test:isTrue( actual )
+    return self:expect(function()
+        local msg = fVar(actual).." is not true"
+        return actual == true, msg
+    end)
+end
+function Test:isFalse( actual )
+    return self:expect(function()
+        local msg = fVar(actual).." is not false"
+        return v == false, msg
+    end)
+end
+function Test:isTruthy( actual )
+    return self:expect(function()
+        local msg = fVar(actual).." is not truthy"
+        return not not actual, msg
+    end)
+end
+function Test:isFalsy( actual )
+    return self:expect(function()
+        local msg = fVar(actual).." is not falsy"
+        return not actual, msg
+    end)
+end
+function Test:isNil( actual )
+    return self:expect(function()
+        local msg = fVar(actual).." is not nil"
+        return actual == nil, msg
+    end)
+end
+function Test:hasEntry( actual, key, expected )
+    self:expect(function()
+        local msg = fVar(actual).." is not a table with entry ["..fVar(key).."] and expected value "..fVar(expected)
+        return type(actual)=="table" and actual[key] == expected, msg
+    end)
+end
+function Test:hasKey( actual, key )
+    self:expect(function()
+        local msg = fVar(actual).." > is not a table with entry ["..fVar(key).."]"
+        return type(actual)=="table" and actual[key] == expected, msg
     end)
 end
 

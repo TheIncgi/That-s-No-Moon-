@@ -61,8 +61,9 @@ function Proxy.static.varargs()
     return VARARGS_PATTERN
 end
 
-function Proxy:new( target )
-    if not target then error("target expected",2) end
+function Proxy:new( name, target )
+    if type(name)~="string" then error("name expected as arg 1",2) end
+    if not target then error("target expected as arg 2",2) end
     local obj = {
         target = target,
         records = {
@@ -70,6 +71,7 @@ function Proxy:new( target )
             index = {},
             assign = {}
         },
+        debugName = name,
         realDefault = false, --if false, calling throws an error about missing stubbing, only used on calls
         mockCall = {},
         mockIndex = {},
@@ -86,8 +88,8 @@ function Proxy:new( target )
             if obj.mockIndex[k] then error("overwrite of mocked index value", 2) end
             obj.mockIndex[k] = v
         end,
-        __call=function(t,f,...)
-            return obj:_createMockCall(f)
+        __call=function(t,...)
+            return obj:_createMockCall({...})
         end
     })
     setmetatable(obj.proxy, {
@@ -102,10 +104,39 @@ function Proxy:new( target )
             return            
         end,
         __call=function(t,...)
-            obj.records.call[f] = obj.records.call[f] or {}
-            table.insert(obj.records.call[f], {...})
-            return self:_match( f, {...})
+            table.insert(obj.records.call, {...})
+            return obj:_match({...})
         end,
+        __pairs=function(t)
+            return my_pairs()
+                local keys = {}
+                for key, _ in pairs(t) do-------------------------------------
+                  table.insert(keys, key)
+                end
+                local i = 0
+                return function()
+                  i = i + 1
+                  local key = keys[i]
+                  if key ~= nil then
+                    return key, t[key]
+                  end
+                end
+              end
+              
+            return pairs(obj.target)
+        end,
+        __ipairs=function(t)
+            return my_ipairs(t)
+                local i = 0
+                return function()
+                  i = i + 1
+                  if obj.target[i] ~= nil then
+                    return i, obj.target[i]
+                  end
+                end
+              end
+        end,
+        
         __type=type(target)
     })
     return obj
@@ -198,18 +229,18 @@ function Proxy:_createMockCall(pattern)
     return r
 end
 
-function Proxy:_match(name, args)
+function Proxy:_match(args)
     local nArgs = #args
     local f
-    for i, option in ipairs(self.mockCall[name]) do
-        local N = (option.pattern or option.exact).n
-        local isVarargs = (option.pattern.varargs or option.exact.varargs)
+    for i, option in ipairs(self.mockCall) do
+        local N = (option[option.type]).n or #(option[option.type])
+        local isVarargs = (option[option.type]).varargs
         local matches = true
-        local isExact = not not option.exact
+        
         if nArgs == N or 
             (isVarargs and nArgs > N) then
             for j,matcher in ipairs( option.pattern or option.exact ) do
-                if isExact then
+                if option.exact then
                     if matcher ~= args[j] then
                         matches = false
                         break
@@ -240,8 +271,8 @@ function Proxy:_match(name, args)
     end
 
     if not f then --default/always backup
-        if self.mockCall[name].always then
-            f = self.mockCall[name]
+        if self.mockCall.always then
+            f = self.mockCall.always
         end
     end
 
@@ -256,7 +287,7 @@ function Proxy:_match(name, args)
                 table.insert(argsStr, fVar(arg))
             end
             argsStr = table.concat(argsStr)
-            error("Missing stubbing for call to `"..name.."` with args ["..argsStr.."]. Add stubbing or use `realDefault=true`", 3)
+            error("Missing stubbing for call to `"..self.debugName.."` with args ["..argsStr.."]. Add stubbing or use `realDefault=true`", 3)
         end
     end
     if f.returns then
@@ -270,13 +301,13 @@ end
 
 --return true if all mock call results have atleast 1 hit
 function Proxy:allHit()
-    local usageReport = {"Proxy<",tostring(self.target),">:\n"}
+    local usageReport = {"Proxy<",self.debugName,">:\n"}
     local all = true
     for i, mock in ipairs(self.mockCall) do
         if mock.hits == 0 then
             all = false
         end
-        table.insert(usageReport, ("\tid: %2d | hits: %5d | type: %s"):format(
+        table.insert(usageReport, ("\tid: %2d | hits: %5d | type: %s\n"):format(
             mock.id, mock.hits, mock.type
         ))
     end
