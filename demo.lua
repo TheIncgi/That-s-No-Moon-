@@ -54,7 +54,7 @@ do --test 4, expected: FAIL, uses pairs instead of ipairs
   tester:add("shouldNotLook", nil, function()
     myLib.printAll( fooProxy.proxy )
   end)
-    :eq(fooProxy.records.index.x or 0, 0)
+    :var_eq(function() return fooProxy.records.index.x or 0 end, 0)
 end
 
 local results = tester:run()

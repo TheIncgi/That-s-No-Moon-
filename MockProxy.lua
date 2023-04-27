@@ -108,33 +108,20 @@ function Proxy:new( name, target )
             return obj:_match({...})
         end,
         __pairs=function(t)
-            return my_pairs()
-                local keys = {}
-                for key, _ in pairs(t) do-------------------------------------
-                  table.insert(keys, key)
-                end
-                local i = 0
-                return function()
-                  i = i + 1
-                  local key = keys[i]
-                  if key ~= nil then
-                    return key, t[key]
-                  end
-                end
-              end
-              
-            return pairs(obj.target)
+            return function(t,k) 
+                local nextKey = next(t,k)
+                if not nextKey then return end
+                local nextVal = obj.proxy[nextKey]
+                return nextKey, nextVal
+            end, obj.target, nil 
         end,
         __ipairs=function(t)
-            return my_ipairs(t)
-                local i = 0
-                return function()
-                  i = i + 1
-                  if obj.target[i] ~= nil then
-                    return i, obj.target[i]
-                  end
-                end
-              end
+            return function(t,k)
+                k = (k==nil) and 1 or (k+1)
+                if not obj.target[k] then return end
+                local v = obj.proxy[k]
+                return k,v
+            end, obj.target, nil
         end,
         
         __type=type(target)
