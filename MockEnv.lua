@@ -7,7 +7,8 @@ function MockEnv:new()
         proxyList = {}, --to build
         envValues = {}, --holds proxies and values
         globals = {}, --doubles as temp storage
-        unbuild = {}
+        unbuild = {},
+        addedToEnv = false
     }
     setmetatable(obj, {__index=self})
     obj:reset()
@@ -32,6 +33,12 @@ function MockEnv:proxy( name, object )
     local proxy = Proxy:new( name, object )
     self.envValues[name] = proxy.proxy
     table.insert(self.proxyList, proxy)
+    return proxy
+end
+
+function MockEnv:globalProxy( name, object )
+    local proxy = self:proxy( name, object )
+    self.envValues[name] = proxy.proxy
     return proxy
 end
 
