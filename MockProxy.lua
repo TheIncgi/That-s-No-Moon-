@@ -90,7 +90,7 @@ function Proxy:new( name, target )
             obj.mockIndex[k] = v
         end,
         __call=function(t,...)
-            return obj:_createMockCall({...})
+            return obj:_createMockCall(...)
         end
     })
     setmetatable(obj.proxy, {
@@ -128,6 +128,10 @@ function Proxy:new( name, target )
         __type=type(target)
     })
     return obj
+end
+
+function Proxy:findCalls(pattern)
+  
 end
 
 --myProxy()                                     .always("bar")
@@ -204,6 +208,28 @@ function Proxy:_createMockCall(pattern)
                 id = id
             }
             return self.mockCall.always
+        end,
+        exactNever = function()
+            local mock = {
+                type = "exactNever",
+                exact = pattern,
+                hits = 0,
+                id = id,
+                never = true
+            }
+            table.insert(self.mockCall, mock)
+            return mock
+        end,
+        matchedNever = function()
+            local mock = {
+                type = "exactNever",
+                pattern = pattern,
+                hits = 0,
+                id = id,
+                never = true
+            }
+            table.insert(self.mockCall, mock)
+            return mock
         end
     }
     r.default = r.always
@@ -284,11 +310,14 @@ function Proxy:_match(args)
 end
 
 --return true if all mock call results have atleast 1 hit
+--and all `never` get 0 hits
 function Proxy:allHit()
     local usageReport = {"Proxy<",self.debugName,">:\n"}
     local all = true
     for i, mock in ipairs(self.mockCall) do
-        if mock.hits == 0 then
+        if mock.never 
+          and (mock.hits > 0)
+          or  (mock.hits == 0) then
             all = false
         end
         table.insert(usageReport, ("\tid: %2d | hits: %5d | type: %s\n"):format(
