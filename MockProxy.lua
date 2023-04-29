@@ -67,6 +67,7 @@ function Proxy:new( name, target )
     local obj = {
         target = target,
         records = {
+            totalCalls = 0,
             call = {},
             index = {},
             assign = {}
@@ -141,7 +142,6 @@ function Proxy:_createMockCall(pattern)
     local r = {
         exact = function(...)
             local returns = {...}
-            self.mockCall = self.mockCall or {}
             local mock = {
                 type = "exact",
                 exact = pattern,
@@ -154,7 +154,6 @@ function Proxy:_createMockCall(pattern)
         end,
         matched = function(...)
             local returns = {...}
-            self.mockCall = self.mockCall or {}
             local mock = {
                 type = "matched",
                 pattern = pattern,
@@ -167,7 +166,6 @@ function Proxy:_createMockCall(pattern)
         end,
         always = function(...)
             local returns = {...}
-            self.mockCall = self.mockCall or {}
             self.mockCall.always = {
                 type = "always",
                 returns = returns,
@@ -177,7 +175,6 @@ function Proxy:_createMockCall(pattern)
             return self.mockCall.always
         end,
         exactCompute = function(computeFunc)
-            self.mockCall = self.mockCall or {}
             local mock = {
                 type = "exactCompute",
                 exact = pattern,
@@ -189,7 +186,6 @@ function Proxy:_createMockCall(pattern)
             return mock
         end,
         matchedCompute = function(computeFunc)
-            self.mockCall = self.mockCall or {}
             local mock = {
                 type = "matchedCompute",
                 pattern = pattern,
@@ -201,7 +197,6 @@ function Proxy:_createMockCall(pattern)
             return mock
         end,
         alwaysCompute = function(computeFunc)
-            self.mockCall = self.mockCall or {}
             self.mockCall.always = {
                 type = "alwaysCompute",
                 compute = computeFunc,
@@ -220,13 +215,14 @@ function Proxy:_match(args)
     local nArgs = #args
     local f
     for i, option in ipairs(self.mockCall) do
-        local N = (option[option.type]).n or #(option[option.type])
-        local isVarargs = (option[option.type]).varargs
+        local N = (option.exact or option.pattern).n or #(option.exact or option.pattern)
+        local isVarargs = (option.exact or option.pattern).varargs
         local matches = true
         
         if nArgs == N or 
             (isVarargs and nArgs > N) then
-            for j,matcher in ipairs( option.pattern or option.exact ) do
+            for j = 1, nArgs do
+                matcher = ( option.pattern or option.exact )[j]
                 if option.exact then
                     if matcher ~= args[j] then
                         matches = false
@@ -263,9 +259,10 @@ function Proxy:_match(args)
         end
     end
 
-    f.hits = f.hits + 1
-    
-    if not f then
+    self.records.totalCalls = self.records.totalCalls + 1
+    if f then
+        f.hits = f.hits + 1
+    else
         if self.realDefault then
             return self.target(table.unpack(args)) --real function
         else
@@ -274,7 +271,7 @@ function Proxy:_match(args)
                 table.insert(argsStr, fVar(arg))
             end
             argsStr = table.concat(argsStr)
-            error("Missing stubbing for call to `"..self.debugName.."` with args ["..argsStr.."]. Add stubbing or use `realDefault=true`", 3)
+            error("Missing stubbing for call to `"..self.debugName.."` with args ["..argsStr.."]. Add stubbing or use `.realDefault=true`", 3)
         end
     end
     if f.returns then
