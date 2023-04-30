@@ -7,8 +7,7 @@ function MockEnv:new()
         proxyList = {}, --to build
         envValues = {}, --holds proxies and values
         globals = {}, --doubles as temp storage
-        unbuild = {},
-        addedToEnv = false
+        unbuild = {}
     }
     setmetatable(obj, {__index=self})
     obj:reset()

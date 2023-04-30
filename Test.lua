@@ -61,10 +61,9 @@ function Test:run()
         local allHit, usage = proxy:allHit()
         if not allHit then
             self.passed = false
-            self.reason = ("All expectations met, but you have unused stubbing on your %d%s proxy. Here are the stubs and usage:\n\t%s")
+            self.reason = ("All expectations met, but you have one or more stubbing issues on your proxy of `%s`. Here are the stubs and usage:\n\t%s")
                 :format(
-                    i,
-                    ({"st","nd","rd"})[i%10] or "th",
+                    proxy.debugName,
                     usage
                 )
             return self.passed, self.reason --failed

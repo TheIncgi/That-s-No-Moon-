@@ -306,6 +306,9 @@ function Proxy:_match(args)
     if f.compute then
         return f.compute(table.unpack(args))
     end
+    if f.type:find("Never") then
+        return
+    end
     error("missing case")
 end
 
@@ -315,9 +318,8 @@ function Proxy:allHit()
     local usageReport = {"Proxy<",self.debugName,">:\n"}
     local all = true
     for i, mock in ipairs(self.mockCall) do
-        if mock.never 
-          and (mock.hits > 0)
-          or  (mock.hits == 0) then
+        if ( mock.never and (mock.hits > 0))
+        or ( not mock.never and mock.hits == 0) then
             all = false
         end
         table.insert(usageReport, ("\tid: %2d | hits: %5d | type: %s\n"):format(
