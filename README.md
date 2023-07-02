@@ -82,7 +82,7 @@ do --limit scope of test stuff
   printProxy{"Hello world!"}.exact()
 
   --test code
-  tester:add("shouldPrintHelloWorld", env, function()
+  local test = tester:add("shouldPrintHelloWorld", env, function()
      print("Hello world!") --more realisticly, some library that calls print
      
      --can return values here to use in tests
