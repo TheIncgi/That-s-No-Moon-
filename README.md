@@ -76,7 +76,7 @@ do --limit scope of test stuff
   --..required objects & libraries, reset things if needed..
   
   --proxies
-  --local printProxy = env:proxy( "print", print) --`realDefault = true` will do a real print
+  --local printProxy = env:proxy( "print", print) --with `.realDefault = true` will do a real print
   local printProxy = env:proxy( "print", function() end) --dummy function if you want to disable normal functionality
 
   --stubbing
