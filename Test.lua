@@ -34,7 +34,7 @@ function Test:run()
     end
     if not ok and not self.expects.error then
         self.passed = false
-        self.reason = "No errror was expected, but one was thrown. Error: "..tostring(results[2])
+        self.reason = "No error was expected, but one was thrown. Error: "..tostring(results[2])
         return self.passed, self.reason
     end
     if not ok and self.expects.error then
