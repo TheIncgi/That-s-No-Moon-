@@ -151,6 +151,8 @@ end, 1, "top test pixel called $1 times instead of once")
 |test:isNil( actual, errorMsg )                    |
 |test:hasEntry( actual, key, expected, errorMsg )  |
 |test:hasKey( actual, key, errorMsg )              |
+| ************************************************ |
+|test:expectError( withMessage )                   |
 
 Additionally you can make custom test checks with this
 ```lua
