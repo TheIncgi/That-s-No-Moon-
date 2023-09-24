@@ -161,3 +161,5 @@ test:expect(function() --use upvalues
   return <true to pass, false to fail>, msg
 end)
 ```
+The `n`th return value can be retreived with
+`test.actionResults[n]` 
